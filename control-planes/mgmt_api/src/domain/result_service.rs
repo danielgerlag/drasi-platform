@@ -71,10 +71,10 @@ impl ResultService {
 pub mod api {
     use std::fmt::{Display, Formatter};
 
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
     use serde_json::{Map, Value};
 
-    #[derive(Deserialize, Debug, Clone)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     #[serde(tag = "kind")]
     pub enum ControlSignal {
         #[serde(rename = "bootstrapStarted")]
@@ -105,7 +105,7 @@ pub mod api {
         }
     }
 
-    #[derive(Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug)]
     #[serde(tag = "kind")]
     pub enum ResultEvent {
         #[serde(rename = "change")]
@@ -115,7 +115,7 @@ pub mod api {
         Control(ResultControlEvent),
     }
 
-    #[derive(Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug)]
     #[serde(rename_all = "camelCase")]
     pub struct ResultChangeEvent {
         pub query_id: String,
@@ -127,7 +127,7 @@ pub mod api {
         pub metadata: Option<Map<String, Value>>,
     }
 
-    #[derive(Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug)]
     #[serde(rename_all = "camelCase")]
     pub struct ResultControlEvent {
         pub query_id: String,
@@ -137,7 +137,7 @@ pub mod api {
         pub control_signal: ControlSignal,
     }
 
-    #[derive(Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug)]
     pub struct UpdatePayload {
         pub before: Option<Map<String, Value>>,
         pub after: Option<Map<String, Value>>,
