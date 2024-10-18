@@ -70,6 +70,7 @@ pub struct QuerySpec {
     pub sources: QuerySources,
     pub storage_profile: Option<String>,
     pub view: ViewSpec,
+    pub transient: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
