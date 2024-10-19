@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use dapr::client::TonicClient;
 use serde::{de::DeserializeOwned, Serialize};
-use std::{fmt::Debug, time::Duration};
+use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use crate::{
     domain::models::{DomainError, Resource},
@@ -33,7 +33,7 @@ where
     TApiStatus: DeserializeOwned + Send + Sync,
 {
     dapr_client: dapr::Client<TonicClient>,
-    repo: Box<dyn ResourceSpecRepository<TSpec> + Send + Sync>,
+    repo: Arc<dyn ResourceSpecRepository<TSpec> + Send + Sync>,
     actor_type: fn(&TSpec) -> String,
     ready_check: fn(&TStatus) -> bool,
     validators: Vec<Box<dyn StandardSpecValidator<TSpec> + Send + Sync>>,

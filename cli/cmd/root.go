@@ -17,6 +17,7 @@ func MakeRootCommand() *cobra.Command {
 		NewNamespaceCommand(),
 		NewUninstallCommand(),
 		NewVersionCommand(),
+		NewWatchCommand(),
 	)
 
 	rootCommand.PersistentFlags().StringP("namespace", "n", "drasi-system", "Kubernetes namespace to install Drasi into")

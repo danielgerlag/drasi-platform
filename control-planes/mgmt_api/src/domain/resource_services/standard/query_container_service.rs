@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::{ResourceDomainService, StandardResourceDomainServiceImpl};
 use crate::{
     domain::models::{QueryContainerSpec, QueryContainerStatus},
@@ -17,7 +19,7 @@ pub type QueryContainerDomainServiceImpl = StandardResourceDomainServiceImpl<
 impl QueryContainerDomainServiceImpl {
     pub fn new(
         dapr_client: dapr::Client<TonicClient>,
-        repo: Box<QueryContainerRepository>,
+        repo: Arc<QueryContainerRepository>,
     ) -> Self {
         QueryContainerDomainServiceImpl {
             dapr_client,

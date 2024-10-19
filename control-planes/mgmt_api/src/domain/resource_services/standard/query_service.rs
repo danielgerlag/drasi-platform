@@ -22,7 +22,7 @@ pub type QueryDomainServiceImpl = StandardResourceDomainServiceImpl<
 impl QueryDomainServiceImpl {
     pub fn new(
         dapr_client: dapr::Client<TonicClient>,
-        repo: Box<QueryRepository>,
+        repo: Arc<QueryRepository>,
         container_service: Arc<QueryContainerDomainService>,
     ) -> Self {
         QueryDomainServiceImpl {
