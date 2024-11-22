@@ -1,0 +1,518 @@
+# Copyright 2024 The Drasi Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Draft Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version Tag'
+        required: true        
+
+permissions:
+  id-token: write # Required for requesting the JWT
+  contents: read  # Required for actions/checkout
+  packages: read
+
+env:
+  RELEASE_PATH: ./release
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate Branch
+        run: |
+          if [[ "${{ github.ref_name }}" =~ ^(release)/ ]]; then
+            echo "Branch has the correct prefix."
+          else
+            echo "Branch does not have the correct prefix. Exiting..."
+            exit 1
+          fi
+
+  build-query-container:
+    needs: validate
+    permissions:
+      packages: write
+      contents: read
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        with:
+          submodules: true
+          token: ${{ secrets.DRASI_CORE_PAT }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.2.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@988b5a0280414f521da01fcc63a27aeeb4b104db # v3.6.1
+        with:
+          install: true
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build Query Host
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: ./query-container/query-host
+          file: ./query-container/query-host/Dockerfile
+          platforms: linux/amd64, linux/arm64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/query-container-query-host:${{ inputs.tag }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/query-host:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/query-host:cache,mode=max
+          push: true
+
+      - name: Build Publish API
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: ./query-container/publish-api
+          file: ./query-container/publish-api/Dockerfile
+          platforms: linux/amd64, linux/arm64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/query-container-publish-api:${{ inputs.tag }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/publish-api:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/publish-api:cache
+          push: true
+
+      - name: Build View Service
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: ./query-container/view-svc
+          file: ./query-container/view-svc/Dockerfile
+          platforms: linux/amd64, linux/arm64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/query-container-view-svc:${{ inputs.tag }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/view-svc:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/view-svc:cache
+          push: true
+
+  build-control-plane:
+    runs-on: ubuntu-latest
+    needs: validate
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.2.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@988b5a0280414f521da01fcc63a27aeeb4b104db # v3.6.1
+        with:
+          install: true
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build Management API
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: '.'
+          file: ./control-planes/mgmt_api/Dockerfile
+          platforms: linux/amd64, linux/arm64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/api:${{ inputs.tag }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/api:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/api:cache,mode=max
+          push: true
+
+      - name: Build k8s Resource Provider
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: ./control-planes
+          file: ./control-planes/kubernetes_provider/Dockerfile
+          platforms: linux/amd64, linux/arm64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/kubernetes-provider:${{ inputs.tag }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/kubernetes-provider:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/kubernetes-provider:cache,mode=max
+          push: true
+
+  build-sources:
+    runs-on: ubuntu-latest
+    needs: validate
+    permissions:
+      packages: write
+      contents: read
+    strategy:
+      matrix:
+        component: [
+          { 
+            label: 'Change Router',
+            context: '.', 
+            file: './sources/shared/change-router/Dockerfile', 
+            name: 'source-change-router', 
+            platforms: 'linux/amd64,linux/arm64'
+          },
+          { 
+            label: 'Change Dispatcher',
+            context: '.', 
+            file: './sources/shared/change-dispatcher/Dockerfile', 
+            name: 'source-change-dispatcher', 
+            platforms: 'linux/amd64,linux/arm64'
+          },
+          { 
+            label: 'Query API',
+            context: '.', 
+            file: './sources/shared/query-api/Dockerfile', 
+            name: 'source-query-api', 
+            platforms: 'linux/amd64,linux/arm64'
+          },
+          { 
+            label: 'Debezium Reactivator',
+            context: './sources/relational/debezium-reactivator', 
+            file: './sources/relational/debezium-reactivator/Dockerfile', 
+            name: 'source-debezium-reactivator', 
+            platforms: 'linux/amd64,linux/arm64' 
+          },
+          { 
+            label: 'SQL Proxy',
+            context: './sources/relational/sql-proxy', 
+            file: './sources/relational/sql-proxy/Dockerfile', 
+            name: 'source-sql-proxy', 
+            platforms: 'linux/amd64,linux/arm64'
+          },
+
+          { 
+            label: 'CosmosDB Reactivator',
+            context: './sources/cosmosdb/cosmosdb-ffcf-reactivator', 
+            file: './sources/cosmosdb/cosmosdb-ffcf-reactivator/Dockerfile', 
+            name: 'source-cosmosdb-reactivator', 
+            platforms: 'linux/amd64,linux/arm64' 
+          },
+          { 
+            label: 'Gremlin Proxy',
+            context: './sources/cosmosdb/gremlin-proxy', 
+            file: './sources/cosmosdb/gremlin-proxy/Dockerfile', 
+            name: 'source-gremlin-proxy', 
+            platforms: 'linux/amd64,linux/arm64'
+          },
+
+          { 
+            label: 'Dataverse Reactivator',
+            context: './sources/dataverse/dataverse-reactivator', 
+            file: './sources/dataverse/dataverse-reactivator/Dockerfile', 
+            name: 'source-dataverse-reactivator', 
+            platforms: 'linux/amd64,linux/arm64' 
+          },
+          { 
+            label: 'Dataverse Proxy',
+            context: './sources/dataverse/dataverse-proxy', 
+            file: './sources/dataverse/dataverse-proxy/Dockerfile', 
+            name: 'source-dataverse-proxy', 
+            platforms: 'linux/amd64,linux/arm64' 
+          },
+
+          { 
+            label: 'EventHub Reactivator',
+            context: './sources/eventhub/eventhub-reactivator', 
+            file: './sources/eventhub/eventhub-reactivator/Dockerfile', 
+            name: 'source-eventhub-reactivator', 
+            platforms: 'linux/amd64,linux/arm64' 
+          },
+          { 
+            label: 'EventHub Proxy',
+            context: './sources/eventhub/eventhub-proxy', 
+            file: './sources/eventhub/eventhub-proxy/Dockerfile', 
+            name: 'source-eventhub-proxy', 
+            platforms: 'linux/amd64,linux/arm64' 
+          }
+        ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.2.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@988b5a0280414f521da01fcc63a27aeeb4b104db # v3.6.1
+        with:
+          install: true
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: ${{ matrix.component.context }}
+          file: ${{ matrix.component.file }}
+          platforms: ${{ matrix.component.platforms }}
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.component.name }}:${{ inputs.tag }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.component.name }}:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.component.name }}:cache,mode=max
+          push: true
+
+  build-reactions:
+    needs: validate
+    permissions:
+      packages: write
+      contents: read
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: [
+          { 
+            label: 'SignalR',
+            context: './reactions/signalr/signalr-reaction', 
+            file: './reactions/signalr/signalr-reaction/Dockerfile', 
+            name: 'reaction-signalr', 
+            platforms: 'linux/amd64,linux/arm64'
+          },
+          { 
+            label: 'Dataverse',
+            context: './reactions/power-platform/dataverse/dataverse-reaction', 
+            file: './reactions/power-platform/dataverse/dataverse-reaction/Dockerfile', 
+            name: 'reaction-dataverse', 
+            platforms: 'linux/amd64'
+          },
+          { 
+            label: 'Debezium',
+            context: './reactions/debezium/debezium-reaction', 
+            file: './reactions/debezium/debezium-reaction/Dockerfile', 
+            name: 'reaction-debezium', 
+            platforms: 'linux/amd64,linux/arm64'
+          },
+          { 
+            label: 'Debug',
+            context: './reactions/platform/debug-reaction', 
+            file: './reactions/platform/debug-reaction/Dockerfile', 
+            name: 'reaction-debug', 
+            platforms: 'linux/amd64,linux/arm64'
+          },
+          { 
+            label: 'EventGrid',
+            context: './reactions/azure/eventgrid-reaction', 
+            file: './reactions/azure/eventgrid-reaction/Dockerfile', 
+            name: 'reaction-eventgrid', 
+            platforms: 'linux/amd64,linux/arm64'
+          },
+          { 
+            label: 'Gremlin',
+            context: './reactions/gremlin/gremlin-reaction', 
+            file: './reactions/gremlin/gremlin-reaction/Dockerfile', 
+            name: 'reaction-gremlin', 
+            platforms: 'linux/amd64,linux/arm64'
+          },
+          { 
+            label: 'Result',
+            context: './reactions/platform/result-reaction', 
+            file: './reactions/platform/result-reaction/Dockerfile', 
+            name: 'reaction-result', 
+            platforms: 'linux/amd64,linux/arm64'
+          },
+          { 
+            label: 'StorageQueue',
+            context: './reactions/azure/storagequeue-reaction', 
+            file: './reactions/azure/storagequeue-reaction/Dockerfile', 
+            name: 'reaction-storagequeue', 
+            platforms: 'linux/amd64,linux/arm64'
+          },
+          { 
+            label: 'StoredProc',
+            context: './reactions/sql/storedproc-reaction', 
+            file: './reactions/sql/storedproc-reaction/Dockerfile', 
+            name: 'reaction-storedproc', 
+            platforms: 'linux/amd64,linux/arm64'
+          }
+        ]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.2.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@988b5a0280414f521da01fcc63a27aeeb4b104db # v3.6.1
+        with:
+          install: true
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+     
+      - name: Build and push
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: ${{ matrix.component.context }}
+          file: ${{ matrix.component.file }}
+          platforms: ${{ matrix.component.platforms }}
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.component.name }}:${{ inputs.tag }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.component.name }}:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.component.name }}:cache,mode=max
+          push: true
+  
+  build-cli:
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Set up Go
+        uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
+        with:
+          go-version: '1.21'
+
+      - name: Cache Go modules
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Build
+        working-directory: cli
+        run: make VERSION='${{ inputs.tag }}'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5a # v4.3.6
+        with:
+          name: cli
+          path: cli/bin
+
+  package-cli:
+    needs: build-cli
+    runs-on: ubuntu-latest
+    name: Publish ${{ matrix.os }}_${{ matrix.arch }} binaries
+    environment: 
+      name: github-actions
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: arm64
+          - os: linux
+            arch: x64
+          - os: darwin
+            arch: arm64
+          - os: darwin
+            arch: x64
+          - os: windows
+            arch: x64
+    steps:
+      - name: Download binaries
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: cli
+      - name: Copy cli binaries to release (non-windows)
+        if: matrix.os != 'windows'
+        run: |
+          mkdir -p ${{ env.RELEASE_PATH}}/cli/${{ matrix.os }}-${{ matrix.arch }}/
+          cp -r ${{ matrix.os }}-${{ matrix.arch }}/drasi ${{ env.RELEASE_PATH}}/drasi-${{ matrix.os }}-${{ matrix.arch }}
+      - name: Copy cli binaries to release (non-windows)
+        if: matrix.os == 'windows'
+        run: |
+          mkdir -p ${{ env.RELEASE_PATH}}/cli/${{ matrix.os }}-${{ matrix.arch }}/
+          cp -r ${{ matrix.os }}-${{ matrix.arch }}/drasi.exe ${{ env.RELEASE_PATH}}/drasi-${{ matrix.os }}-${{ matrix.arch }}.exe
+      - name: Upload release
+        uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5a # v4.3.6
+        with:
+          name: drasi_${{ matrix.os }}_${{ matrix.arch }}
+          path: ${{ env.RELEASE_PATH}}
+
+  vscode-extension:
+    name: Build and publish the VSCode extension
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: 
+      name: github-actions
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Building the extension
+        run: |
+          cd dev-tools/vscode/drasi
+          npm install -g @vscode/vsce 
+          npm install
+          npm version ${{ inputs.tag }}
+          vsce package
+      - name: Copy the extension to release
+        run: |
+          mkdir -p ${{ env.RELEASE_PATH}}/vscode-extension/
+          cp dev-tools/vscode/drasi/drasi-*.vsix ${{ env.RELEASE_PATH}}
+      - name: Upload release
+        uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5a # v4.3.6
+        with:
+          name: drasi_vscode_extension
+          path: ${{ env.RELEASE_PATH}}
+   
+  release:
+    permissions:
+      contents: write
+      packages: read  
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    name: Draft Release
+    needs:
+      - validate
+      - build-sources
+      - build-query-container
+      - build-reactions
+      - build-control-plane
+      - package-cli      
+      - vscode-extension
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        
+      - name: Download CLI release
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          pattern: drasi_*
+          merge-multiple: true
+          path: ${{ env.RELEASE_PATH }}
+
+      - name: Download vscode release
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: drasi_vscode_extension
+          merge-multiple: true
+          path: ${{ env.RELEASE_PATH }}
+
+      - name: Draft Release
+        run: |
+          gh release create ${{ inputs.tag }} ${{ env.RELEASE_PATH }}/* --draft --title ${{ inputs.tag }} --target ${{ github.ref_name }} --generate-notes 
