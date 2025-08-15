@@ -1,10 +1,12 @@
 kind: Reaction
 apiVersion: v1
-name: test-advanced
+name: test-agent
 spec:
-  kind: Advanced
+  kind: Agent
   properties:
-    MyConnectionString: "some connection string"
+    AI_SYSTEM_PROMPT: "You are a helpful assistant."
+    MCP_SERVERS_CONFIG: > 
+      [{ "url": "https://mcp-server-1.com", "apiKey": "abc123" }]
   queries:
     query1: |
       greeting: "Hello, World!"

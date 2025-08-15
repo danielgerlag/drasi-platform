@@ -75,7 +75,15 @@ IMPORTANT: You MUST use available tools to complete tasks. Do not just describe 
 
 When you identify actions needed, explicitly mention the specific tools you will use with their exact names from the available tools list.
 
-For each tool you want to use, include one of these exact statements:
+TOOL EXECUTION ORDER:
+When recommending multiple tools, you MUST specify the execution order by providing a numbered plan. Format it exactly like this:
+
+EXECUTION PLAN:
+1. \`tool-name-1\` - brief reason
+2. \`tool-name-2\` - brief reason  
+3. \`tool-name-3\` - brief reason
+
+For each tool you want to use, also include one of these exact statements:
 - "I will use \`exact-tool-name\` to action"
 - "\`exact-tool-name\` tool"
 - "Use \`exact-tool-name\`"
@@ -170,6 +178,17 @@ Please analyze this change event and determine what actions, if any, should be t
   private async executeRecommendedTools(aiResponse: string, availableTools: MCPTool[], changeEvent: any, queryId: string): Promise<Array<{tool: string, result: any}>> {
     console.log(`🔧 Starting tool recommendation parsing...`);
     
+    // First, try to extract execution plan from AI response
+    const orderedTools = this.extractExecutionPlan(aiResponse, availableTools);
+    
+    if (orderedTools.length > 0) {
+      console.log(`🎯 AI provided execution plan with ${orderedTools.length} tools`);
+      return await this.executeToolsInOrder(orderedTools, changeEvent, queryId, []);
+    }
+    
+    // Fallback to pattern-based tool detection
+    console.log(`🔍 No execution plan found, falling back to pattern-based detection`);
+    
     // Look for tool mentions in various formats - completely generic
     const toolMentionPatterns = [
       /(?:use|using|invoke|call)\s+(?:the\s+)?(?:`([^`]+)`|([a-zA-Z0-9_:-]+))\s*tool/gim,
@@ -217,57 +236,75 @@ Please analyze this change event and determine what actions, if any, should be t
       return [];
     }
     
+    // Convert to ordered list (no prioritization, use order found)
+    const toolsInOrder = Array.from(recommendedTools).map(toolName => {
+      const matchingTool = availableTools.find(t => 
+        t.name.toLowerCase() === toolName || 
+        t.name.toLowerCase().endsWith(':' + toolName)
+      );
+      return matchingTool!;
+    }).filter(Boolean);
+    
+    return await this.executeToolsInOrder(toolsInOrder, changeEvent, queryId, []);
+  }
+  
+  private extractExecutionPlan(aiResponse: string, availableTools: MCPTool[]): MCPTool[] {
+    // Look for execution plan in the AI response
+    const executionPlanPattern = /EXECUTION PLAN:\s*((?:\d+\.\s*`[^`]+`[^\n]*\n?)+)/gim;
+    const match = executionPlanPattern.exec(aiResponse);
+    
+    if (!match) {
+      return [];
+    }
+    
+    const planText = match[1];
+    console.log(`📋 Found execution plan: ${planText.trim()}`);
+    
+    // Extract individual tool entries from the plan
+    const toolEntryPattern = /\d+\.\s*`([^`]+)`/gim;
+    const orderedTools: MCPTool[] = [];
+    
+    let toolMatch: RegExpExecArray | null;
+    while ((toolMatch = toolEntryPattern.exec(planText)) !== null) {
+      const toolName = toolMatch[1].trim().toLowerCase();
+      
+      const matchingTool = availableTools.find(t => 
+        t.name.toLowerCase() === toolName || 
+        t.name.toLowerCase().endsWith(':' + toolName)
+      );
+      
+      if (matchingTool) {
+        orderedTools.push(matchingTool);
+        console.log(`📝 Execution plan step ${orderedTools.length}: ${matchingTool.name}`);
+      } else {
+        console.log(`⚠️ Tool in execution plan not found: ${toolName}`);
+      }
+    }
+    
+    return orderedTools;
+  }
+  
+  private async executeToolsInOrder(tools: MCPTool[], changeEvent: any, queryId: string, previousResults: Array<{tool: string, result: any}>): Promise<Array<{tool: string, result: any}>> {
     const toolResults: Array<{tool: string, result: any}> = [];
     
-    // Sort tools to prioritize research tools over comment/output tools
-    const sortedTools = Array.from(recommendedTools).sort((a, b) => {
-      // Research tools (browser, get, search) should come first
-      const aIsResearch = a.includes('browser') || a.includes('get') || a.includes('search') || a.includes('navigate') || a.includes('snapshot');
-      const bIsResearch = b.includes('browser') || b.includes('get') || b.includes('search') || b.includes('navigate') || b.includes('snapshot');
-      
-      // Comment/add tools should come last
-      const aIsOutput = a.includes('comment') || a.includes('add') || a.includes('create') || a.includes('post');
-      const bIsOutput = b.includes('comment') || b.includes('add') || b.includes('create') || b.includes('post');
-      
-      if (aIsResearch && !bIsResearch) return -1;
-      if (!aIsResearch && bIsResearch) return 1;
-      if (aIsOutput && !bIsOutput) return 1;
-      if (!aIsOutput && bIsOutput) return -1;
-      
-      return 0;
-    });
+    console.log(`🔄 Executing ${tools.length} tools in AI-specified order`);
     
-    console.log(`🔄 Executing tools in prioritized order: ${sortedTools.join(', ')}`);
-    
-    for (const recommendedToolName of sortedTools) {
-      // Find exact matching tools only
-      const matchingTools = availableTools.filter(tool => {
-        const toolNameLower = tool.name.toLowerCase();
-        return toolNameLower === recommendedToolName || toolNameLower.endsWith(':' + recommendedToolName);
-      });
+    for (const tool of tools) {
+      console.log(`🔧 Executing tool: ${tool.name}`);
       
-      if (matchingTools.length === 0) {
-        console.log(`⚠️ No matching tool found for recommendation: ${recommendedToolName}`);
-        continue;
-      }
-      
-      for (const tool of matchingTools) {
-        console.log(`🔧 Executing explicitly recommended tool: ${tool.name}`);
+      try {
+        // Let the AI determine the appropriate arguments for the tool
+        const toolArgs = await this.generateToolArguments(tool, changeEvent, queryId, [...previousResults, ...toolResults]);
         
-        try {
-          // Let the AI determine the appropriate arguments for the tool
-          const toolArgs = await this.generateToolArguments(tool, changeEvent, queryId, toolResults);
-          
-          console.log(`🔧 Calling ${tool.name} with AI-generated arguments:`, toolArgs);
-          const toolResult = await this.mcpManager.callTool(tool.name, toolArgs);
-          console.log(`✅ Tool ${tool.name} executed successfully:`, JSON.stringify(toolResult, null, 2));
-          
-          // Store the result for potential follow-up actions
-          toolResults.push({ tool: tool.name, result: toolResult });
-          
-        } catch (error) {
-          console.error(`❌ Failed to execute tool ${tool.name}:`, error);
-        }
+        console.log(`🔧 Calling ${tool.name} with AI-generated arguments:`, toolArgs);
+        const toolResult = await this.mcpManager.callTool(tool.name, toolArgs);
+        console.log(`✅ Tool ${tool.name} executed successfully:`, JSON.stringify(toolResult, null, 2));
+        
+        // Store the result for potential follow-up actions
+        toolResults.push({ tool: tool.name, result: toolResult });
+        
+      } catch (error) {
+        console.error(`❌ Failed to execute tool ${tool.name}:`, error);
       }
     }
     
@@ -277,6 +314,17 @@ Please analyze this change event and determine what actions, if any, should be t
   private async executeRecommendedToolsWithContext(aiResponse: string, availableTools: MCPTool[], changeEvent: any, queryId: string, toolResults: Array<{tool: string, result: any}>, workflowContext: string): Promise<Array<{tool: string, result: any}>> {
     console.log(`🔧 Starting tool recommendation parsing with workflow context...`);
     
+    // First, try to extract execution plan from AI response
+    const orderedTools = this.extractExecutionPlan(aiResponse, availableTools);
+    
+    if (orderedTools.length > 0) {
+      console.log(`🎯 AI provided execution plan with ${orderedTools.length} tools`);
+      return await this.executeToolsInOrderWithContext(orderedTools, changeEvent, queryId, toolResults, workflowContext);
+    }
+    
+    // Fallback to pattern-based tool detection
+    console.log(`🔍 No execution plan found, falling back to pattern-based detection`);
+    
     // Look for tool mentions in various formats - completely generic
     const toolMentionPatterns = [
       /(?:use|using|invoke|call)\s+(?:the\s+)?(?:`([^`]+)`|([a-zA-Z0-9_:-]+))\s*tool/gim,
@@ -324,57 +372,39 @@ Please analyze this change event and determine what actions, if any, should be t
       return [];
     }
     
+    // Convert to ordered list (no prioritization, use order found)
+    const toolsInOrder = Array.from(recommendedTools).map(toolName => {
+      const matchingTool = availableTools.find(t => 
+        t.name.toLowerCase() === toolName || 
+        t.name.toLowerCase().endsWith(':' + toolName)
+      );
+      return matchingTool!;
+    }).filter(Boolean);
+    
+    return await this.executeToolsInOrderWithContext(toolsInOrder, changeEvent, queryId, toolResults, workflowContext);
+  }
+  
+  private async executeToolsInOrderWithContext(tools: MCPTool[], changeEvent: any, queryId: string, previousResults: Array<{tool: string, result: any}>, workflowContext: string): Promise<Array<{tool: string, result: any}>> {
     const newToolResults: Array<{tool: string, result: any}> = [];
     
-    // Sort tools to prioritize research tools over comment/output tools
-    const sortedTools = Array.from(recommendedTools).sort((a, b) => {
-      // Research tools (browser, get, search) should come first
-      const aIsResearch = a.includes('browser') || a.includes('get') || a.includes('search') || a.includes('navigate') || a.includes('snapshot');
-      const bIsResearch = b.includes('browser') || b.includes('get') || b.includes('search') || b.includes('navigate') || b.includes('snapshot');
-      
-      // Comment/add tools should come last
-      const aIsOutput = a.includes('comment') || a.includes('add') || a.includes('create') || a.includes('post');
-      const bIsOutput = b.includes('comment') || b.includes('add') || b.includes('create') || b.includes('post');
-      
-      if (aIsResearch && !bIsResearch) return -1;
-      if (!aIsResearch && bIsResearch) return 1;
-      if (aIsOutput && !bIsOutput) return 1;
-      if (!aIsOutput && bIsOutput) return -1;
-      
-      return 0;
-    });
+    console.log(`🔄 Executing ${tools.length} tools in AI-specified order with workflow context`);
     
-    console.log(`🔄 Executing tools in prioritized order: ${sortedTools.join(', ')}`);
-    
-    for (const recommendedToolName of sortedTools) {
-      // Find exact matching tools only
-      const matchingTools = availableTools.filter(tool => {
-        const toolNameLower = tool.name.toLowerCase();
-        return toolNameLower === recommendedToolName || toolNameLower.endsWith(':' + recommendedToolName);
-      });
+    for (const tool of tools) {
+      console.log(`🔧 Executing tool: ${tool.name}`);
       
-      if (matchingTools.length === 0) {
-        console.log(`⚠️ No matching tool found for recommendation: ${recommendedToolName}`);
-        continue;
-      }
-      
-      for (const tool of matchingTools) {
-        console.log(`🔧 Executing explicitly recommended tool: ${tool.name}`);
+      try {
+        // Let the AI determine the appropriate arguments for the tool with workflow context
+        const toolArgs = await this.generateToolArgumentsWithContext(tool, changeEvent, queryId, [...previousResults, ...newToolResults], workflowContext);
         
-        try {
-          // Let the AI determine the appropriate arguments for the tool with workflow context
-          const toolArgs = await this.generateToolArgumentsWithContext(tool, changeEvent, queryId, toolResults, workflowContext);
-          
-          console.log(`🔧 Calling ${tool.name} with AI-generated arguments:`, toolArgs);
-          const toolResult = await this.mcpManager.callTool(tool.name, toolArgs);
-          console.log(`✅ Tool ${tool.name} executed successfully:`, JSON.stringify(toolResult, null, 2));
-          
-          // Store the result for potential follow-up actions
-          newToolResults.push({ tool: tool.name, result: toolResult });
-          
-        } catch (error) {
-          console.error(`❌ Failed to execute tool ${tool.name}:`, error);
-        }
+        console.log(`🔧 Calling ${tool.name} with AI-generated arguments:`, toolArgs);
+        const toolResult = await this.mcpManager.callTool(tool.name, toolArgs);
+        console.log(`✅ Tool ${tool.name} executed successfully:`, JSON.stringify(toolResult, null, 2));
+        
+        // Store the result for potential follow-up actions
+        newToolResults.push({ tool: tool.name, result: toolResult });
+        
+      } catch (error) {
+        console.error(`❌ Failed to execute tool ${tool.name}:`, error);
       }
     }
     
@@ -473,7 +503,6 @@ Schema: ${JSON.stringify(tool.inputSchema, null, 2)}
 IMPORTANT CONTEXT INSTRUCTIONS:
 - The workflow context contains specific instructions about what URLs to visit
 - For browser navigation tools, extract the EXACT URL mentioned in the workflow context
-- For example, if the workflow says "Use playwright:browser_navigate to visit https://inversify.io/", use "https://inversify.io/" as the URL
 - Do NOT use URLs from the change event data unless specifically instructed by the workflow
 - Always prioritize URLs and instructions from the workflow context over default values
 
@@ -574,6 +603,14 @@ WORKFLOW GUIDANCE:
 - Always complete workflows by producing final outputs that utilize all gathered information
 - When creating comments or summaries, include all relevant details from the data you've collected AND from any web pages you visited
 - Do NOT create comments until you have browsed all relevant URLs and gathered their content
+
+TOOL EXECUTION ORDER:
+When recommending multiple tools, you MUST specify the execution order by providing a numbered plan. Format it exactly like this:
+
+EXECUTION PLAN:
+1. \`tool-name-1\` - brief reason
+2. \`tool-name-2\` - brief reason  
+3. \`tool-name-3\` - brief reason
 
 If additional tools are needed to complete the task, specify them clearly with exact tool names.
 If the task is complete or no additional tools are needed, respond with "WORKFLOW_COMPLETE".`;

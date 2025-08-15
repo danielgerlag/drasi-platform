@@ -1,11 +1,10 @@
 apiVersion: v1
 kind: ReactionProvider
-name: Advanced
+name: Agent
 spec:
   services:
     reaction:
-      image: reaction-advanced
-      externalImage: true
+      image: reaction-agent
   config_schema:
     type: object
     properties: 
