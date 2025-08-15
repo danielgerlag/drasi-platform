@@ -219,7 +219,27 @@ Please analyze this change event and determine what actions, if any, should be t
     
     const toolResults: Array<{tool: string, result: any}> = [];
     
-    for (const recommendedToolName of recommendedTools) {
+    // Sort tools to prioritize research tools over comment/output tools
+    const sortedTools = Array.from(recommendedTools).sort((a, b) => {
+      // Research tools (browser, get, search) should come first
+      const aIsResearch = a.includes('browser') || a.includes('get') || a.includes('search') || a.includes('navigate') || a.includes('snapshot');
+      const bIsResearch = b.includes('browser') || b.includes('get') || b.includes('search') || b.includes('navigate') || b.includes('snapshot');
+      
+      // Comment/add tools should come last
+      const aIsOutput = a.includes('comment') || a.includes('add') || a.includes('create') || a.includes('post');
+      const bIsOutput = b.includes('comment') || b.includes('add') || b.includes('create') || b.includes('post');
+      
+      if (aIsResearch && !bIsResearch) return -1;
+      if (!aIsResearch && bIsResearch) return 1;
+      if (aIsOutput && !bIsOutput) return 1;
+      if (!aIsOutput && bIsOutput) return -1;
+      
+      return 0;
+    });
+    
+    console.log(`🔄 Executing tools in prioritized order: ${sortedTools.join(', ')}`);
+    
+    for (const recommendedToolName of sortedTools) {
       // Find exact matching tools only
       const matchingTools = availableTools.filter(tool => {
         const toolNameLower = tool.name.toLowerCase();
@@ -252,6 +272,113 @@ Please analyze this change event and determine what actions, if any, should be t
     }
     
     return toolResults;
+  }
+
+  private async executeRecommendedToolsWithContext(aiResponse: string, availableTools: MCPTool[], changeEvent: any, queryId: string, toolResults: Array<{tool: string, result: any}>, workflowContext: string): Promise<Array<{tool: string, result: any}>> {
+    console.log(`🔧 Starting tool recommendation parsing with workflow context...`);
+    
+    // Look for tool mentions in various formats - completely generic
+    const toolMentionPatterns = [
+      /(?:use|using|invoke|call)\s+(?:the\s+)?(?:`([^`]+)`|([a-zA-Z0-9_:-]+))\s*tool/gim,
+      /\[([a-zA-Z0-9_:-]+)\]/gim,
+      /(?:I will use|I'll use|Let me use)\s+(?:the\s+)?(?:`([^`]+)`|([a-zA-Z0-9_:-]+))/gim,
+      /\*\*`([^`]+)`\*\*/gim,  // **`github:add_issue_comment`** format
+      /`([a-zA-Z0-9_:-]+)`/gim  // Generic backtick format
+    ];
+    
+    const recommendedTools = new Set<string>();
+    
+    // Extract tools mentioned in any of the patterns
+    for (const pattern of toolMentionPatterns) {
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(aiResponse)) !== null) {
+        // Extract tool name from any capture group
+        let toolName = '';
+        for (let i = 1; i < match.length; i++) {
+          if (match[i]) {
+            toolName = match[i].trim().toLowerCase();
+            break;
+          }
+        }
+        
+        // Only add if it's a valid tool name and matches available tools
+        if (toolName && toolName !== 'this' && toolName !== 'tool' && toolName !== 'following') {
+          const matchingTool = availableTools.find(t => 
+            t.name.toLowerCase() === toolName || 
+            t.name.toLowerCase().endsWith(':' + toolName)
+          );
+          
+          if (matchingTool) {
+            console.log(`🎯 Found tool recommendation: "${match[0].trim()}" -> tool: "${matchingTool.name}"`);
+            recommendedTools.add(matchingTool.name.toLowerCase());
+          }
+        }
+      }
+    }
+    
+    console.log(`🔍 AI explicitly recommended ${recommendedTools.size} tools: ${Array.from(recommendedTools).join(', ')}`);
+    
+    // Only execute tools that were explicitly recommended
+    if (recommendedTools.size === 0) {
+      console.log(`ℹ️ AI did not explicitly recommend any tools for execution`);
+      return [];
+    }
+    
+    const newToolResults: Array<{tool: string, result: any}> = [];
+    
+    // Sort tools to prioritize research tools over comment/output tools
+    const sortedTools = Array.from(recommendedTools).sort((a, b) => {
+      // Research tools (browser, get, search) should come first
+      const aIsResearch = a.includes('browser') || a.includes('get') || a.includes('search') || a.includes('navigate') || a.includes('snapshot');
+      const bIsResearch = b.includes('browser') || b.includes('get') || b.includes('search') || b.includes('navigate') || b.includes('snapshot');
+      
+      // Comment/add tools should come last
+      const aIsOutput = a.includes('comment') || a.includes('add') || a.includes('create') || a.includes('post');
+      const bIsOutput = b.includes('comment') || b.includes('add') || b.includes('create') || b.includes('post');
+      
+      if (aIsResearch && !bIsResearch) return -1;
+      if (!aIsResearch && bIsResearch) return 1;
+      if (aIsOutput && !bIsOutput) return 1;
+      if (!aIsOutput && bIsOutput) return -1;
+      
+      return 0;
+    });
+    
+    console.log(`🔄 Executing tools in prioritized order: ${sortedTools.join(', ')}`);
+    
+    for (const recommendedToolName of sortedTools) {
+      // Find exact matching tools only
+      const matchingTools = availableTools.filter(tool => {
+        const toolNameLower = tool.name.toLowerCase();
+        return toolNameLower === recommendedToolName || toolNameLower.endsWith(':' + recommendedToolName);
+      });
+      
+      if (matchingTools.length === 0) {
+        console.log(`⚠️ No matching tool found for recommendation: ${recommendedToolName}`);
+        continue;
+      }
+      
+      for (const tool of matchingTools) {
+        console.log(`🔧 Executing explicitly recommended tool: ${tool.name}`);
+        
+        try {
+          // Let the AI determine the appropriate arguments for the tool with workflow context
+          const toolArgs = await this.generateToolArgumentsWithContext(tool, changeEvent, queryId, toolResults, workflowContext);
+          
+          console.log(`🔧 Calling ${tool.name} with AI-generated arguments:`, toolArgs);
+          const toolResult = await this.mcpManager.callTool(tool.name, toolArgs);
+          console.log(`✅ Tool ${tool.name} executed successfully:`, JSON.stringify(toolResult, null, 2));
+          
+          // Store the result for potential follow-up actions
+          newToolResults.push({ tool: tool.name, result: toolResult });
+          
+        } catch (error) {
+          console.error(`❌ Failed to execute tool ${tool.name}:`, error);
+        }
+      }
+    }
+    
+    return newToolResults;
   }
 
   private async generateToolArguments(tool: MCPTool, changeEvent: any, queryId: string, previousToolResults: Array<{tool: string, result: any}> = []): Promise<any> {
@@ -334,6 +461,95 @@ Generate the appropriate arguments for calling ${tool.name}:`;
     }
   }
 
+  private async generateToolArgumentsWithContext(tool: MCPTool, changeEvent: any, queryId: string, previousToolResults: Array<{tool: string, result: any}>, workflowContext: string): Promise<any> {
+    try {
+      // Use AI to generate appropriate tool arguments based on the tool schema, available data, and workflow context
+      const systemMessage = `You are a tool argument generator. Given a tool schema, change event data, previous tool results, and workflow context, generate the correct JSON arguments to call the tool.
+
+Tool: ${tool.name}
+Description: ${tool.description}
+Schema: ${JSON.stringify(tool.inputSchema, null, 2)}
+
+IMPORTANT CONTEXT INSTRUCTIONS:
+- The workflow context contains specific instructions about what URLs to visit
+- For browser navigation tools, extract the EXACT URL mentioned in the workflow context
+- For example, if the workflow says "Use playwright:browser_navigate to visit https://inversify.io/", use "https://inversify.io/" as the URL
+- Do NOT use URLs from the change event data unless specifically instructed by the workflow
+- Always prioritize URLs and instructions from the workflow context over default values
+
+Rules:
+1. Return ONLY valid JSON that matches the tool's input schema
+2. Use data from the workflow context as the PRIMARY source for arguments
+3. Extract specific URLs, paths, or parameters mentioned in the workflow context
+4. Use data from previous tool results when relevant
+5. Use data from the change event only when no specific instruction exists in workflow context
+6. Do not wrap JSON in markdown code blocks
+7. Do not include any explanation, only the JSON object`;
+
+      const userMessage = `Change Event Data:
+${JSON.stringify(changeEvent, null, 2)}
+
+Previous Tool Results:
+${JSON.stringify(previousToolResults, null, 2)}
+
+Workflow Context (PRIORITY INSTRUCTIONS):
+${workflowContext}
+
+Query ID: ${queryId}
+Timestamp: ${new Date().toISOString()}
+
+Generate the appropriate arguments for calling ${tool.name} based on the workflow context above:`;
+
+      const messages = [
+        new SystemMessage(systemMessage),
+        new HumanMessage(userMessage),
+      ];
+
+      console.log(`🤖 Asking AI to generate arguments for ${tool.name} with workflow context...`);
+      const response = await this.llm.invoke(messages);
+      
+      let responseText = '';
+      if (typeof response.content === 'string') {
+        responseText = response.content;
+      } else {
+        responseText = JSON.stringify(response.content);
+      }
+
+      // Parse the AI response as JSON (handle markdown code blocks)
+      try {
+        let jsonText = responseText.trim();
+        
+        // Remove markdown code blocks if present
+        if (jsonText.startsWith('```json')) {
+          jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (jsonText.startsWith('```')) {
+          jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+        
+        const toolArgs = JSON.parse(jsonText);
+        console.log(`✅ AI generated valid arguments for ${tool.name} with workflow context`);
+        return toolArgs;
+      } catch (parseError) {
+        console.error(`❌ AI response was not valid JSON for ${tool.name}:`, responseText);
+        // Fallback to basic arguments
+        return {
+          queryId,
+          timestamp: new Date().toISOString(),
+          eventData: changeEvent
+        };
+      }
+      
+    } catch (error) {
+      console.error(`❌ Failed to generate tool arguments for ${tool.name}:`, error);
+      // Fallback to basic arguments
+      return {
+        queryId,
+        timestamp: new Date().toISOString(),
+        eventData: changeEvent
+      };
+    }
+  }
+
 
   private async continueWorkflow(originalResponse: string, toolResults: Array<{tool: string, result: any}>, availableTools: MCPTool[], changeEvent: any, queryId: string): Promise<{response: string, newResults: Array<{tool: string, result: any}>} | null> {
     try {
@@ -351,13 +567,15 @@ ${availableTools.map(t => `- ${t.name}: ${t.description}`).join('\n')}
 
 WORKFLOW GUIDANCE:
 - If you have gathered sufficient data through previous tool calls, now create comprehensive outputs using available tools
-- Always look for web links (URLs) in the content from previous tool results
-- If you find any HTTP/HTTPS URLs, use available web browsing tools to extract content from those links
+- IMPORTANT: Always look for web links (URLs) in the content from previous tool results
+- If you find any HTTP/HTTPS URLs, you MUST explicitly specify web browsing tools to extract content from those links
+- When you find URLs, say exactly: "Use playwright:browser_navigate to visit [URL]" and "Use playwright:browser_snapshot to capture content"
 - Use all information from previous tool results AND web content to create detailed, informative content
 - Always complete workflows by producing final outputs that utilize all gathered information
 - When creating comments or summaries, include all relevant details from the data you've collected AND from any web pages you visited
+- Do NOT create comments until you have browsed all relevant URLs and gathered their content
 
-If additional tools are needed to complete the task, specify them clearly.
+If additional tools are needed to complete the task, specify them clearly with exact tool names.
 If the task is complete or no additional tools are needed, respond with "WORKFLOW_COMPLETE".`;
 
       const userMessage = `Based on the tool results above, what additional steps (if any) are needed to complete the original task?
@@ -387,8 +605,8 @@ Original change event: ${JSON.stringify(changeEvent, null, 2)}`;
         return null;
       }
 
-      // Execute any additional recommended tools
-      const additionalResults = await this.executeRecommendedTools(responseText, availableTools, changeEvent, queryId);
+      // Execute any additional recommended tools with workflow context
+      const additionalResults = await this.executeRecommendedToolsWithContext(responseText, availableTools, changeEvent, queryId, toolResults, responseText);
       
       if (additionalResults.length > 0) {
         console.log(`✅ Executed ${additionalResults.length} additional tools in workflow`);

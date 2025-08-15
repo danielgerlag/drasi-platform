@@ -9,7 +9,10 @@ spec:
   config_schema:
     type: object
     properties: 
-      MyConnectionString:
+      MCP_SERVERS_CONFIG:
+        type: string
+      AI_SYSTEM_PROMPT:
         type: string
     required:
-      - MyConnectionString
+      - MCP_SERVERS_CONFIG
+      - AI_SYSTEM_PROMPT
