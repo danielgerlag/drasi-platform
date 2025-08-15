@@ -1,0 +1,46 @@
+servers:
+  # Database Operations MCP Server
+  - name: "database-tools"
+    command: "node"
+    args: ["./mcp-servers/database-server.js"]
+    env:
+      DATABASE_URL: "postgresql://user:password@localhost:5432/drasi_db"
+      DB_POOL_SIZE: "10"
+
+  # Notification Service MCP Server  
+  - name: "notification-service"
+    command: "python3"
+    args: ["./mcp-servers/notification-server.py"]
+    env:
+      SMTP_SERVER: "smtp.gmail.com"
+      SMTP_PORT: "587"
+      SMTP_USERNAME: "your-email@gmail.com"
+      SMTP_PASSWORD: "your-app-password"
+      SLACK_WEBHOOK_URL: "https://hooks.slack.com/services/your/webhook/url"
+
+  # Analytics and Metrics MCP Server
+  - name: "analytics-tools"
+    command: "node"
+    args: ["./mcp-servers/analytics-server.js"]
+    env:
+      ANALYTICS_API_KEY: "your-analytics-api-key"
+      METRICS_ENDPOINT: "https://api.analytics.com/v1/metrics"
+      DASHBOARD_URL: "https://dashboard.analytics.com"
+
+  # HTTP API Integration MCP Server
+  - name: "api-integration"
+    command: "node"
+    args: ["./mcp-servers/api-integration-server.js"]
+    env:
+      API_BASE_URL: "https://api.your-service.com"
+      API_TOKEN: "your-api-token"
+      RATE_LIMIT: "100"
+
+  # File System Operations MCP Server
+  - name: "file-operations"
+    command: "python3"
+    args: ["./mcp-servers/file-ops-server.py"]
+    env:
+      STORAGE_PATH: "/var/drasi/storage"
+      MAX_FILE_SIZE: "10485760"  # 10MB
+      ALLOWED_EXTENSIONS: "json,csv,txt,log"

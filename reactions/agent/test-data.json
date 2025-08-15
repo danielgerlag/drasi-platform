@@ -1,0 +1,210 @@
+[
+  {
+    "sequence": 1001,
+    "queryId": "customer-onboarding",
+    "addedResults": [
+      {
+        "customerId": "cust-001",
+        "name": "Alice Johnson",
+        "email": "alice.johnson@example.com",
+        "registrationDate": "2025-08-15T09:00:00Z",
+        "status": "pending_verification",
+        "source": "web_signup"
+      },
+      {
+        "customerId": "cust-002", 
+        "name": "Bob Chen",
+        "email": "bob.chen@example.com",
+        "registrationDate": "2025-08-15T09:15:00Z",
+        "status": "pending_verification",
+        "source": "mobile_app"
+      }
+    ],
+    "deletedResults": [],
+    "updatedResults": []
+  },
+  {
+    "sequence": 1002,
+    "queryId": "customer-onboarding",
+    "addedResults": [],
+    "deletedResults": [],
+    "updatedResults": [
+      {
+        "before": {
+          "customerId": "cust-001",
+          "name": "Alice Johnson",
+          "email": "alice.johnson@example.com",
+          "registrationDate": "2025-08-15T09:00:00Z",
+          "status": "pending_verification",
+          "source": "web_signup"
+        },
+        "after": {
+          "customerId": "cust-001",
+          "name": "Alice Johnson",
+          "email": "alice.johnson@example.com",
+          "registrationDate": "2025-08-15T09:00:00Z",
+          "status": "verified",
+          "source": "web_signup",
+          "verificationDate": "2025-08-15T10:30:00Z"
+        }
+      }
+    ]
+  },
+  {
+    "sequence": 1003,
+    "queryId": "inventory-alerts",
+    "addedResults": [
+      {
+        "alertId": "alert-001",
+        "productId": "prod-laptop-001",
+        "productName": "UltraBook Pro 15",
+        "currentStock": 5,
+        "threshold": 10,
+        "alertType": "low_stock",
+        "severity": "warning",
+        "createdAt": "2025-08-15T11:00:00Z"
+      }
+    ],
+    "deletedResults": [],
+    "updatedResults": []
+  },
+  {
+    "sequence": 1004,
+    "queryId": "order-fulfillment",
+    "addedResults": [
+      {
+        "orderId": "order-789",
+        "customerId": "cust-001",
+        "items": [
+          {
+            "productId": "prod-laptop-001",
+            "productName": "UltraBook Pro 15",
+            "quantity": 1,
+            "unitPrice": 1299.99
+          },
+          {
+            "productId": "prod-mouse-001",
+            "productName": "Wireless Mouse",
+            "quantity": 2,
+            "unitPrice": 29.99
+          }
+        ],
+        "totalAmount": 1359.97,
+        "status": "confirmed",
+        "orderDate": "2025-08-15T11:30:00Z",
+        "estimatedDelivery": "2025-08-18T00:00:00Z"
+      }
+    ],
+    "deletedResults": [],
+    "updatedResults": []
+  },
+  {
+    "sequence": 1005,
+    "queryId": "inventory-alerts",
+    "addedResults": [],
+    "deletedResults": [
+      {
+        "alertId": "alert-001",
+        "productId": "prod-laptop-001",
+        "productName": "UltraBook Pro 15",
+        "currentStock": 5,
+        "threshold": 10,
+        "alertType": "low_stock",
+        "severity": "warning",
+        "createdAt": "2025-08-15T11:00:00Z"
+      }
+    ],
+    "updatedResults": []
+  },
+  {
+    "sequence": 1006,
+    "queryId": "inventory-alerts",
+    "addedResults": [
+      {
+        "alertId": "alert-002",
+        "productId": "prod-laptop-001",
+        "productName": "UltraBook Pro 15",
+        "currentStock": 4,
+        "threshold": 10,
+        "alertType": "critical_stock",
+        "severity": "critical",
+        "createdAt": "2025-08-15T11:31:00Z",
+        "message": "Stock decreased due to order fulfillment"
+      }
+    ],
+    "deletedResults": [],
+    "updatedResults": []
+  },
+  {
+    "sequence": 1007,
+    "queryId": "order-fulfillment",
+    "addedResults": [],
+    "deletedResults": [],
+    "updatedResults": [
+      {
+        "before": {
+          "orderId": "order-789",
+          "customerId": "cust-001",
+          "items": [
+            {
+              "productId": "prod-laptop-001",
+              "productName": "UltraBook Pro 15",
+              "quantity": 1,
+              "unitPrice": 1299.99
+            },
+            {
+              "productId": "prod-mouse-001",
+              "productName": "Wireless Mouse",
+              "quantity": 2,
+              "unitPrice": 29.99
+            }
+          ],
+          "totalAmount": 1359.97,
+          "status": "confirmed",
+          "orderDate": "2025-08-15T11:30:00Z",
+          "estimatedDelivery": "2025-08-18T00:00:00Z"
+        },
+        "after": {
+          "orderId": "order-789",
+          "customerId": "cust-001",
+          "items": [
+            {
+              "productId": "prod-laptop-001",
+              "productName": "UltraBook Pro 15",
+              "quantity": 1,
+              "unitPrice": 1299.99
+            },
+            {
+              "productId": "prod-mouse-001",
+              "productName": "Wireless Mouse",
+              "quantity": 2,
+              "unitPrice": 29.99
+            }
+          ],
+          "totalAmount": 1359.97,
+          "status": "shipped",
+          "orderDate": "2025-08-15T11:30:00Z",
+          "estimatedDelivery": "2025-08-18T00:00:00Z",
+          "shippedDate": "2025-08-15T14:00:00Z",
+          "trackingNumber": "TRK123456789"
+        }
+      }
+    ]
+  },
+  {
+    "sequence": 1008,
+    "queryId": "customer-onboarding",
+    "addedResults": [],
+    "deletedResults": [
+      {
+        "customerId": "cust-spam-001",
+        "name": "Spam Account",
+        "email": "spam@fake-domain.com",
+        "registrationDate": "2025-08-15T08:00:00Z",
+        "status": "flagged_spam",
+        "source": "automated_signup"
+      }
+    ],
+    "updatedResults": []
+  }
+]
