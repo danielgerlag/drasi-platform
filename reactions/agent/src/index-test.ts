@@ -9,11 +9,12 @@ import * as path from 'path';
 
 // Test configuration
 const testQueryConfig: MyQueryConfig = {
-    prompt: `Analyze the issue content and determine what tools are needed to gather information and provide a comprehensive response. 
-    Look for any URLs in the issue content and use available web browsing tools to extract content from those links. 
+    prompt: `Use the GitHub tool to fetch all the details and content about the issue.
+    Analyze the issue content and determine what tools are needed to gather information and provide a comprehensive response. 
+    Do research on the web regarding any suggestions or tools found in the content.
     If GitHub links come back with a 404, rather use the GitHub tools to locate to information.
-    Create a detailed summary that include all relevant information so that readers don't need to follow links or read issue history, 
-    and post it as a comment on the original GitHub issue.
+    After, and ONLY after you have gathered ALL the information you can, then create a detailed summary that includes ALL relevant information that has been gathered from other issues, comments or web pages so that readers don't need to follow links or read issue history,
+    and post it as a comment on the original GitHub issue, the comment must be a detailed summary of all information gathered, not just an acknowledgment.
     Use available tools as needed to complete the analysis.`
 };
 

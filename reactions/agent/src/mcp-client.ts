@@ -1,6 +1,6 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp';
+const { Client } = require('@modelcontextprotocol/sdk/client');
+const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js');
+const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/sdk/client/streamableHttp.js');
 import { MCPServerConfig, MCPConfig } from './config';
 
 export interface MCPTool {
@@ -11,7 +11,7 @@ export interface MCPTool {
 
 interface MCPClientConnection {
   config: MCPServerConfig;
-  client: Client;
+  client: any;
   connected: boolean;
 }
 
@@ -109,7 +109,7 @@ export class MCPManager {
     }
   }
 
-  private async discoverTools(serverName: string, client: Client): Promise<void> {
+  private async discoverTools(serverName: string, client: any): Promise<void> {
     try {
       console.log(`Discovering tools from ${serverName}...`);
       

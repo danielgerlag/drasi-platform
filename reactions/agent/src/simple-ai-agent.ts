@@ -240,7 +240,7 @@ Please analyze this change event and determine what actions, if any, should be t
           
           console.log(`🔧 Calling ${tool.name} with AI-generated arguments:`, toolArgs);
           const toolResult = await this.mcpManager.callTool(tool.name, toolArgs);
-          console.log(`✅ Tool ${tool.name} executed successfully:`, toolResult);
+          console.log(`✅ Tool ${tool.name} executed successfully:`, JSON.stringify(toolResult, null, 2));
           
           // Store the result for potential follow-up actions
           toolResults.push({ tool: tool.name, result: toolResult });
