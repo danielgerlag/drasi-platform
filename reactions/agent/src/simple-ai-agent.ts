@@ -140,22 +140,53 @@ Please analyze this change event and determine what actions, if any, should be t
       if (toolResults.length > 0) {
         let allToolResults = [...toolResults];
         let currentResponse = responseText;
+        let totalToolsExecuted = toolResults.length;
+        const workflowStartTime = Date.now();
+        const timeoutMs = this.config.workflowTimeoutMinutes * 60 * 1000;
         
-        // Continue workflow until complete (max 3 iterations to prevent infinite loops)
-        for (let iteration = 0; iteration < 3; iteration++) {
-          const followUpResponse = await this.continueWorkflow(currentResponse, allToolResults, availableTools, changeEvent, queryId);
+        console.log(`🔄 Starting workflow continuation with limits: ${this.config.maxWorkflowIterations} iterations, ${this.config.maxTotalTools} total tools, ${this.config.workflowTimeoutMinutes}min timeout`);
+        
+        // Continue workflow until complete with comprehensive safeguards
+        for (let iteration = 0; iteration < this.config.maxWorkflowIterations; iteration++) {
+          // Check timeout
+          if (Date.now() - workflowStartTime > timeoutMs) {
+            console.log(`⏰ Workflow timeout reached after ${this.config.workflowTimeoutMinutes} minutes`);
+            break;
+          }
+          
+          // Check total tool limit
+          if (totalToolsExecuted >= this.config.maxTotalTools) {
+            console.log(`🛑 Maximum total tools limit reached (${this.config.maxTotalTools})`);
+            break;
+          }
+          
+          const followUpResponse = await this.continueWorkflow(currentResponse, allToolResults, availableTools, changeEvent, queryId, iteration + 1, totalToolsExecuted);
           if (followUpResponse) {
             currentResponse += '\n\n' + followUpResponse.response;
             allToolResults.push(...followUpResponse.newResults);
+            totalToolsExecuted += followUpResponse.newResults.length;
+            
+            console.log(`🔄 Iteration ${iteration + 1}: executed ${followUpResponse.newResults.length} tools, total: ${totalToolsExecuted}`);
+            
+            // Check tools per iteration limit
+            if (followUpResponse.newResults.length > this.config.maxToolsPerIteration) {
+              console.log(`⚠️ Too many tools in iteration ${iteration + 1} (${followUpResponse.newResults.length} > ${this.config.maxToolsPerIteration})`);
+            }
             
             // If no new tools were executed, the workflow is complete
             if (followUpResponse.newResults.length === 0) {
+              console.log(`✅ Workflow completed naturally after ${iteration + 1} iterations`);
               break;
             }
           } else {
             // No follow-up needed, workflow is complete
+            console.log(`✅ Workflow completed after ${iteration + 1} iterations`);
             break;
           }
+        }
+        
+        if (totalToolsExecuted >= this.config.maxTotalTools || Date.now() - workflowStartTime > timeoutMs) {
+          console.log(`🛑 Workflow terminated due to limits. Total tools: ${totalToolsExecuted}, Duration: ${Math.round((Date.now() - workflowStartTime) / 1000)}s`);
         }
         
         responseText = currentResponse;
@@ -287,9 +318,15 @@ Please analyze this change event and determine what actions, if any, should be t
   private async executeToolsInOrder(tools: MCPTool[], changeEvent: any, queryId: string, previousResults: Array<{tool: string, result: any}>): Promise<Array<{tool: string, result: any}>> {
     const toolResults: Array<{tool: string, result: any}> = [];
     
-    console.log(`🔄 Executing ${tools.length} tools in AI-specified order`);
+    // Apply per-iteration limit
+    const limitedTools = tools.slice(0, this.config.maxToolsPerIteration);
+    if (tools.length > this.config.maxToolsPerIteration) {
+      console.log(`⚠️ Limiting tools from ${tools.length} to ${this.config.maxToolsPerIteration} per iteration`);
+    }
     
-    for (const tool of tools) {
+    console.log(`🔄 Executing ${limitedTools.length} tools in AI-specified order`);
+    
+    for (const tool of limitedTools) {
       console.log(`🔧 Executing tool: ${tool.name}`);
       
       try {
@@ -387,9 +424,15 @@ Please analyze this change event and determine what actions, if any, should be t
   private async executeToolsInOrderWithContext(tools: MCPTool[], changeEvent: any, queryId: string, previousResults: Array<{tool: string, result: any}>, workflowContext: string): Promise<Array<{tool: string, result: any}>> {
     const newToolResults: Array<{tool: string, result: any}> = [];
     
-    console.log(`🔄 Executing ${tools.length} tools in AI-specified order with workflow context`);
+    // Apply per-iteration limit
+    const limitedTools = tools.slice(0, this.config.maxToolsPerIteration);
+    if (tools.length > this.config.maxToolsPerIteration) {
+      console.log(`⚠️ Limiting tools from ${tools.length} to ${this.config.maxToolsPerIteration} per iteration`);
+    }
     
-    for (const tool of tools) {
+    console.log(`🔄 Executing ${limitedTools.length} tools in AI-specified order with workflow context`);
+    
+    for (const tool of limitedTools) {
       console.log(`🔧 Executing tool: ${tool.name}`);
       
       try {
@@ -580,9 +623,20 @@ Generate the appropriate arguments for calling ${tool.name} based on the workflo
   }
 
 
-  private async continueWorkflow(originalResponse: string, toolResults: Array<{tool: string, result: any}>, availableTools: MCPTool[], changeEvent: any, queryId: string): Promise<{response: string, newResults: Array<{tool: string, result: any}>} | null> {
+  private async continueWorkflow(originalResponse: string, toolResults: Array<{tool: string, result: any}>, availableTools: MCPTool[], changeEvent: any, queryId: string, iteration: number = 1, totalToolsExecuted: number = 0): Promise<{response: string, newResults: Array<{tool: string, result: any}>} | null> {
     try {
-      console.log(`🔄 Analyzing tool results to determine next steps...`);
+      console.log(`🔄 Iteration ${iteration}: Analyzing tool results (${totalToolsExecuted} tools executed so far)...`);
+      
+      // Check if we're hitting iteration limits
+      if (iteration >= this.config.maxWorkflowIterations) {
+        console.log(`🛑 Maximum workflow iterations reached (${this.config.maxWorkflowIterations})`);
+        return null;
+      }
+      
+      if (totalToolsExecuted >= this.config.maxTotalTools) {
+        console.log(`🛑 Maximum total tools limit reached (${this.config.maxTotalTools})`);
+        return null;
+      }
       
       // Create a system message for workflow continuation
       const systemMessage = `You are continuing a workflow. Based on the previous analysis and tool results, determine if additional tools should be used to complete the task.
@@ -603,6 +657,12 @@ WORKFLOW GUIDANCE:
 - Always complete workflows by producing final outputs that utilize all gathered information
 - When creating comments or summaries, include all relevant details from the data you've collected AND from any web pages you visited
 - Do NOT create comments until you have browsed all relevant URLs and gathered their content
+
+WORKFLOW LIMITS (Iteration ${iteration}):
+- You have executed ${totalToolsExecuted} tools so far
+- Maximum ${this.config.maxTotalTools - totalToolsExecuted} tools remaining
+- Recommend at most ${this.config.maxToolsPerIteration} tools in this iteration
+- If you're close to limits, focus on essential final steps only
 
 TOOL EXECUTION ORDER:
 When recommending multiple tools, you MUST specify the execution order by providing a numbered plan. Format it exactly like this:
@@ -644,6 +704,17 @@ Original change event: ${JSON.stringify(changeEvent, null, 2)}`;
 
       // Execute any additional recommended tools with workflow context
       const additionalResults = await this.executeRecommendedToolsWithContext(responseText, availableTools, changeEvent, queryId, toolResults, responseText);
+      
+      // Check if we exceeded per-iteration limit
+      if (additionalResults.length > this.config.maxToolsPerIteration) {
+        console.log(`⚠️ Iteration ${iteration} exceeded tool limit: ${additionalResults.length} > ${this.config.maxToolsPerIteration}`);
+        // Truncate to the limit
+        const limitedResults = additionalResults.slice(0, this.config.maxToolsPerIteration);
+        return {
+          response: responseText,
+          newResults: limitedResults
+        };
+      }
       
       if (additionalResults.length > 0) {
         console.log(`✅ Executed ${additionalResults.length} additional tools in workflow`);

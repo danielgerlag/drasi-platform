@@ -1,19 +1,11 @@
-import { DrasiReaction, parseYaml, ControlEvent, getConfigValue } from '@drasi/reaction-sdk';
+import { DrasiReaction, ControlEvent, getConfigValue } from '@drasi/reaction-sdk';
 import { onChangeEvent, setAIAgent } from './change-handler';
-import { loadConfig } from './config';
+import { loadConfig, getNpxServersFromConfig } from './config';
 import { MCPManager } from './mcp-client';
 import { SimpleAIAgent } from './simple-ai-agent';
 
 // Load configuration from environment variables
 const config = loadConfig();
-
-// Retrieve the connection string from the Reaction configuration
-const myConnectionString = getConfigValue("MyConnectionString");
-
-// Define a custom per query configuration object
-export class MyQueryConfig {
-    prompt: string = "A data change event has occurred.";
-}
 
 // Initialize AI components
 async function initializeAI(): Promise<void> {
@@ -22,6 +14,12 @@ async function initializeAI(): Promise<void> {
         
         // Initialize MCP Manager
         const mcpManager = new MCPManager(config.mcpServers);
+        
+        // Install NPX MCP servers first
+        const npxServers = getNpxServersFromConfig(config);
+        await mcpManager.installNpxMcpServers(npxServers);
+        
+        // Then initialize MCP connections
         await mcpManager.initialize();
         
         // Initialize AI Agent
@@ -55,24 +53,25 @@ async function initializeAI(): Promise<void> {
 }
 
 // Define the function that will be called when a control event is received
-async function onControlEvent(event: ControlEvent, queryConfig?: MyQueryConfig): Promise<void> {    
+async function onControlEvent(event: ControlEvent, queryConfig?: string): Promise<void> {    
     console.log(`📋 Received control signal: ${JSON.stringify(event.controlSignal)} for query ${event.queryId}`);    
 }
 
 async function main(): Promise<void> {
     console.log('🌟 Starting Drasi AI Agent Reaction');
     console.log('====================================');
-    console.log(`Connection string: ${myConnectionString}`);
     console.log(`Log level: ${config.logLevel}`);
     console.log(`Max conversation history: ${config.ai.maxConversationHistory}`);
     console.log(`MCP servers configured: ${config.mcpServers.servers.length}`);
+    const npxServers = getNpxServersFromConfig(config);
+    console.log(`NPX MCP servers to install: ${npxServers.length}`);
     
     // Initialize AI components
     await initializeAI();
     
     // Configure the Reaction with the onChangeEvent and onControlEvent functions
-    let myReaction = new DrasiReaction<MyQueryConfig>(onChangeEvent, {
-        parseQueryConfig: parseYaml, // Parse the per query configuration from Yaml
+    let myReaction = new DrasiReaction<string>(onChangeEvent, {
+        parseQueryConfig: (_queryId, cfg) => cfg,
         onControlEvent: onControlEvent
     });
 

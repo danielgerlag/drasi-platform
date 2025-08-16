@@ -1,5 +1,4 @@
 import * as dotenv from 'dotenv';
-import * as yaml from 'js-yaml';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -30,6 +29,10 @@ export interface AIConfig {
   systemPrompt: string;
   maxConversationHistory: number;
   conversationMemoryTTLHours: number;
+  maxWorkflowIterations: number;
+  maxToolsPerIteration: number;
+  maxTotalTools: number;
+  workflowTimeoutMinutes: number;
 }
 
 export interface AppConfig {
@@ -50,21 +53,42 @@ function getEnvVar(name: string, defaultValue: string): string {
   return process.env[name] || defaultValue;
 }
 
+function extractNpxServersFromConfig(mcpConfig: MCPConfig): string[] {
+  const npxServers: string[] = [];
+  
+  for (const server of mcpConfig.servers) {
+    // Check if this is an NPX-based server (command type with npx)
+    if (server.type === 'command' && server.command === 'npx' && server.args) {
+      // Extract the package name from args (skip -y flag if present)
+      const packageArg = server.args.find(arg => !arg.startsWith('-'));
+      if (packageArg) {
+        npxServers.push(packageArg);
+      }
+    }
+  }
+  
+  if (npxServers.length > 0) {
+    console.log(`Found ${npxServers.length} NPX MCP servers to install:`, npxServers);
+  }
+  
+  return npxServers;
+}
+
 function parseMCPServersConfig(): MCPConfig {
-  const configYaml = getEnvVar('MCP_SERVERS_CONFIG', 'servers: []');
-  console.log('Raw MCP_SERVERS_CONFIG:', configYaml);
+  const configJson = getEnvVar('MCP_SERVERS_CONFIG', '[]');
+  console.log('Raw MCP_SERVERS_CONFIG:', configJson);
   
   try {
-    const config = yaml.load(configYaml) as MCPConfig;
-    console.log('Parsed MCP config:', config);
+    const servers = JSON.parse(configJson) as MCPServerConfig[];
+    console.log('Parsed MCP config:', { servers });
     
-    if (!config || !config.servers) {
-      console.log('No servers found in config, using empty array');
+    if (!Array.isArray(servers)) {
+      console.log('MCP_SERVERS_CONFIG is not an array, using empty array');
       return { servers: [] };
     }
     
     // Substitute environment variables in headers
-    for (const server of config.servers) {
+    for (const server of servers) {
       if (server.headers) {
         for (const [key, value] of Object.entries(server.headers)) {
           if (typeof value === 'string') {
@@ -83,7 +107,7 @@ function parseMCPServersConfig(): MCPConfig {
       }
     }
     
-    return config;
+    return { servers };
   } catch (error) {
     console.error('Failed to parse MCP_SERVERS_CONFIG:', error);
     return { servers: [] };
@@ -91,6 +115,8 @@ function parseMCPServersConfig(): MCPConfig {
 }
 
 export function loadConfig(): AppConfig {
+  const mcpServers = parseMCPServersConfig();
+  
   return {
     ai: {
       azureOpenAI: {
@@ -105,8 +131,16 @@ export function loadConfig(): AppConfig {
       ),
       maxConversationHistory: parseInt(getEnvVar('MAX_CONVERSATION_HISTORY', '50')),
       conversationMemoryTTLHours: parseInt(getEnvVar('CONVERSATION_MEMORY_TTL_HOURS', '24')),
+      maxWorkflowIterations: parseInt(getEnvVar('MAX_WORKFLOW_ITERATIONS', '5')),
+      maxToolsPerIteration: parseInt(getEnvVar('MAX_TOOLS_PER_ITERATION', '10')),
+      maxTotalTools: parseInt(getEnvVar('MAX_TOTAL_TOOLS', '25')),
+      workflowTimeoutMinutes: parseInt(getEnvVar('WORKFLOW_TIMEOUT_MINUTES', '10')),
     },
-    mcpServers: parseMCPServersConfig(),
+    mcpServers,
     logLevel: getEnvVar('LOG_LEVEL', 'info'),
   };
+}
+
+export function getNpxServersFromConfig(config: AppConfig): string[] {
+  return extractNpxServersFromConfig(config.mcpServers);
 }

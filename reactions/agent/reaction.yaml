@@ -4,11 +4,28 @@ name: test-agent
 spec:
   kind: Agent
   properties:
-    AI_SYSTEM_PROMPT: "You are a helpful assistant."
-    MCP_SERVERS_CONFIG: > 
-      [{ "url": "https://mcp-server-1.com", "apiKey": "abc123" }]
+    GITHUB_PERSONAL_ACCESS_TOKEN: xxxxx
+    AI_SYSTEM_PROMPT: |
+      You are an intelligent data change processor. 
+      You MUST use available tools to complete tasks - never just describe what should be done. 
+      When you see URLs in content, immediately use web browsing tools to extract their content. 
+      When working with GitHub links, use GitHub tools to gather information. 
+      Always execute the actual tools needed to gather data and create comprehensive outputs. 
+      Do not just plan or describe - ACT by using the available tools.
+    MCP_SERVERS_CONFIG: | 
+      [
+        {"name": "github", "type": "http", "url": "https://api.githubcopilot.com/mcp/", "headers": {"Authorization": "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}"}}, 
+        {"name": "playwright", "type": "command", "command": "npx", "args": ["-y", "@playwright/mcp"]}, 
+        {"name": "filesystem", "type": "command", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]}
+      ]
   queries:
-    query1: |
-      greeting: "Hello, World!"
+    query1: |      
+      Use the GitHub tool to fetch all the details and content about the issue.
+      Analyze the issue content and determine what tools are needed to gather information and provide a comprehensive response. 
+      Do research on the web regarding any suggestions or tools found in the content.
+      If GitHub links come back with a 404, rather use the GitHub tools to locate to information.
+      After, and ONLY after you have gathered ALL the information you can, then create a detailed summary that includes ALL relevant information that has been gathered from other issues, comments or web pages so that readers don't need to follow links or read issue history,
+      and post it as a comment on the original GitHub issue, the comment must be a detailed summary of all information gathered, not just an acknowledgment.
+      Use available tools as needed to complete the analysis.
     query2: |
       greeting: "Howdy!"

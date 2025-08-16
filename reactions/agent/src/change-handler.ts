@@ -1,5 +1,4 @@
 import { ChangeEvent } from '@drasi/reaction-sdk';
-import { MyQueryConfig } from './index';
 import { SimpleAIAgent } from './simple-ai-agent';
 
 // Global AI agent instance (initialized in index.ts)
@@ -9,7 +8,7 @@ export function setAIAgent(agent: SimpleAIAgent): void {
     aiAgent = agent;
 }
 
-export async function onChangeEvent(event: ChangeEvent, queryConfig?: MyQueryConfig): Promise<void> {
+export async function onChangeEvent(event: ChangeEvent, queryConfig?: string): Promise<void> {
     console.log(`📥 Received change sequence: ${event.sequence} for query ${event.queryId}`);
     
     // Log basic event info
@@ -23,7 +22,7 @@ export async function onChangeEvent(event: ChangeEvent, queryConfig?: MyQueryCon
     const changeEventJson = JSON.stringify(event, null, 2);
     
     // Get the preamble from query config
-    const preamble = queryConfig?.prompt || "A data change event has occurred and needs to be processed.";
+    const preamble = queryConfig || "A data change event has occurred and needs to be processed.";
     
     if (aiAgent) {
         try {
@@ -53,9 +52,9 @@ export async function onChangeEvent(event: ChangeEvent, queryConfig?: MyQueryCon
     }
 }
 
-async function logChangeEventBasic(event: ChangeEvent, queryConfig?: MyQueryConfig): Promise<void> {
-    console.log(queryConfig?.prompt || "A data change event has occurred.");
-    
+async function logChangeEventBasic(event: ChangeEvent, queryConfig?: string): Promise<void> {
+    console.log(queryConfig || "A data change event has occurred.");
+
     for (let added of event.addedResults) {
         console.log(`➕ Added result: ${JSON.stringify(added)}`);
     }

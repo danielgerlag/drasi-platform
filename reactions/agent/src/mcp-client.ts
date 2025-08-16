@@ -2,6 +2,8 @@ const { Client } = require('@modelcontextprotocol/sdk/client');
 const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js');
 const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/sdk/client/streamableHttp.js');
 import { MCPServerConfig, MCPConfig } from './config';
+import { spawn } from 'child_process';
+import { promisify } from 'util';
 
 export interface MCPTool {
   name: string;
@@ -44,6 +46,57 @@ export class MCPManager {
     }
     
     console.log(`Available tools: ${Array.from(this.tools.keys()).join(', ')}`);
+  }
+
+  async installNpxMcpServers(serverPackages: string[]): Promise<void> {
+    if (serverPackages.length === 0) {
+      console.log('No NPX MCP servers to install');
+      return;
+    }
+
+    console.log(`Installing ${serverPackages.length} NPX MCP servers: ${serverPackages.join(', ')}`);
+    
+    for (const packageName of serverPackages) {
+      try {
+        console.log(`Installing ${packageName}...`);
+        await this.installNpxPackage(packageName);
+        console.log(`✅ Successfully installed ${packageName}`);
+      } catch (error) {
+        console.error(`❌ Failed to install ${packageName}:`, error);
+      }
+    }
+  }
+
+  private async installNpxPackage(packageName: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const process = spawn('npx', ['-y', packageName, '--version'], {
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      process.stdout?.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      process.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      process.on('close', (code) => {
+        if (code === 0) {
+          console.log(`${packageName} is available (${stdout.trim()})`);
+          resolve();
+        } else {
+          reject(new Error(`Failed to install ${packageName}: ${stderr}`));
+        }
+      });
+
+      process.on('error', (error) => {
+        reject(error);
+      });
+    });
   }
 
   private async connectToServer(config: MCPServerConfig): Promise<void> {

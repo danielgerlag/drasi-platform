@@ -17,14 +17,12 @@
     "@langchain/openai": "^0.3.0",
     "@modelcontextprotocol/sdk": "^1.17.3",
     "dotenv": "^16.4.5",
-    "js-yaml": "^4.1.0",
     "langchain": "^0.3.0",
     "node-fetch": "^2.7.0",
     "uuid": "^10.0.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/js-yaml": "^4.0.9",
     "@types/node-fetch": "^2.6.13",
     "@types/uuid": "^10.0.0"
   }

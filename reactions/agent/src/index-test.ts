@@ -1,22 +1,19 @@
 import { ChangeEvent } from '@drasi/reaction-sdk';
 import { onChangeEvent, setAIAgent } from './change-handler';
-import { MyQueryConfig } from './index';
-import { loadConfig } from './config';
+import { loadConfig, getNpxServersFromConfig } from './config';
 import { MCPManager } from './mcp-client';
 import { SimpleAIAgent } from './simple-ai-agent';
 import * as fs from 'fs';
 import * as path from 'path';
 
 // Test configuration
-const testQueryConfig: MyQueryConfig = {
-    prompt: `Use the GitHub tool to fetch all the details and content about the issue.
+const testQueryConfig: string =  `Use the GitHub tool to fetch all the details and content about the issue.
     Analyze the issue content and determine what tools are needed to gather information and provide a comprehensive response. 
     Do research on the web regarding any suggestions or tools found in the content.
     If GitHub links come back with a 404, rather use the GitHub tools to locate to information.
     After, and ONLY after you have gathered ALL the information you can, then create a detailed summary that includes ALL relevant information that has been gathered from other issues, comments or web pages so that readers don't need to follow links or read issue history,
     and post it as a comment on the original GitHub issue, the comment must be a detailed summary of all information gathered, not just an acknowledgment.
-    Use available tools as needed to complete the analysis.`
-};
+    Use available tools as needed to complete the analysis.`;
 
 
 // prompt: "Use the GitHub tool to comment on the issue with a summary"
@@ -73,6 +70,12 @@ async function initializeTestAI(): Promise<{ aiAgent: SimpleAIAgent; mcpManager:
         
         // Initialize MCP Manager
         const mcpManager = new MCPManager(config.mcpServers);
+        
+        // Install NPX MCP servers first
+        const npxServers = getNpxServersFromConfig(config);
+        await mcpManager.installNpxMcpServers(npxServers);
+        
+        // Then initialize MCP connections
         await mcpManager.initialize();
         
         // Initialize AI Agent

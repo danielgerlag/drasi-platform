@@ -12,6 +12,12 @@ spec:
         type: string
       AI_SYSTEM_PROMPT:
         type: string
+      AZURE_OPENAI_API_KEY:
+        type: string
+      AZURE_OPENAI_ENDPOINT:
+        type: string
+      AZURE_OPENAI_DEPLOYMENT_NAME:
+        type: string
     required:
       - MCP_SERVERS_CONFIG
       - AI_SYSTEM_PROMPT
