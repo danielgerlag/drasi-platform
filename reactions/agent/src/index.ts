@@ -17,7 +17,7 @@ async function initializeAI(): Promise<void> {
         
         // Install NPX MCP servers first
         const npxServers = getNpxServersFromConfig(config);
-        await mcpManager.installNpxMcpServers(npxServers);
+        await mcpManager.installNpxMcpServers(npxServers, config.npxPostInstallCommands);
         
         // Then initialize MCP connections
         await mcpManager.initialize();

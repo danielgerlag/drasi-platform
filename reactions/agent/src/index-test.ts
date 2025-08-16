@@ -73,7 +73,7 @@ async function initializeTestAI(): Promise<{ aiAgent: SimpleAIAgent; mcpManager:
         
         // Install NPX MCP servers first
         const npxServers = getNpxServersFromConfig(config);
-        await mcpManager.installNpxMcpServers(npxServers);
+        await mcpManager.installNpxMcpServers(npxServers, config.npxPostInstallCommands);
         
         // Then initialize MCP connections
         await mcpManager.initialize();

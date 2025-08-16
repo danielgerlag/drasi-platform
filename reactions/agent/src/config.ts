@@ -35,9 +35,17 @@ export interface AIConfig {
   workflowTimeoutMinutes: number;
 }
 
+export interface NpxPostInstallCommand {
+  packageName: string;
+  command: string;
+  args: string[];
+  description?: string;
+}
+
 export interface AppConfig {
   ai: AIConfig;
   mcpServers: MCPConfig;
+  npxPostInstallCommands: NpxPostInstallCommand[];
   logLevel: string;
 }
 
@@ -137,8 +145,38 @@ export function loadConfig(): AppConfig {
       workflowTimeoutMinutes: parseInt(getEnvVar('WORKFLOW_TIMEOUT_MINUTES', '10')),
     },
     mcpServers,
+    npxPostInstallCommands: parseNpxPostInstallCommands(),
     logLevel: getEnvVar('LOG_LEVEL', 'info'),
   };
+}
+
+function parseNpxPostInstallCommands(): NpxPostInstallCommand[] {
+  const configJson = getEnvVar('NPX_POST_INSTALL_COMMANDS', '[]');
+  console.log('Raw NPX_POST_INSTALL_COMMANDS:', configJson);
+  
+  try {
+    const commands = JSON.parse(configJson) as NpxPostInstallCommand[];
+    console.log('Parsed NPX post-install commands:', { commands });
+    
+    if (!Array.isArray(commands)) {
+      console.log('NPX_POST_INSTALL_COMMANDS is not an array, using empty array');
+      return [];
+    }
+    
+    // Validate command structure
+    const validCommands = commands.filter(cmd => 
+      cmd.packageName && cmd.command && Array.isArray(cmd.args)
+    );
+    
+    if (validCommands.length !== commands.length) {
+      console.log(`⚠️ Some NPX post-install commands were invalid, using ${validCommands.length}/${commands.length}`);
+    }
+    
+    return validCommands;
+  } catch (error) {
+    console.error('Failed to parse NPX_POST_INSTALL_COMMANDS:', error);
+    return [];
+  }
 }
 
 export function getNpxServersFromConfig(config: AppConfig): string[] {

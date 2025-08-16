@@ -1,7 +1,7 @@
 const { Client } = require('@modelcontextprotocol/sdk/client');
 const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js');
 const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/sdk/client/streamableHttp.js');
-import { MCPServerConfig, MCPConfig } from './config';
+import { MCPServerConfig, MCPConfig, NpxPostInstallCommand } from './config';
 import { spawn } from 'child_process';
 import { promisify } from 'util';
 
@@ -48,7 +48,7 @@ export class MCPManager {
     console.log(`Available tools: ${Array.from(this.tools.keys()).join(', ')}`);
   }
 
-  async installNpxMcpServers(serverPackages: string[]): Promise<void> {
+  async installNpxMcpServers(serverPackages: string[], postInstallCommands: NpxPostInstallCommand[] = []): Promise<void> {
     if (serverPackages.length === 0) {
       console.log('No NPX MCP servers to install');
       return;
@@ -61,10 +61,72 @@ export class MCPManager {
         console.log(`Installing ${packageName}...`);
         await this.installNpxPackage(packageName);
         console.log(`✅ Successfully installed ${packageName}`);
+        
+        // Run post-install commands for this package
+        await this.runPostInstallCommands(packageName, postInstallCommands);
+        
       } catch (error) {
         console.error(`❌ Failed to install ${packageName}:`, error);
       }
     }
+  }
+
+  private async runPostInstallCommands(packageName: string, postInstallCommands: NpxPostInstallCommand[]): Promise<void> {
+    const matchingCommands = postInstallCommands.filter(cmd => cmd.packageName === packageName);
+    
+    if (matchingCommands.length === 0) {
+      return;
+    }
+    
+    console.log(`🔧 Running ${matchingCommands.length} post-install commands for ${packageName}...`);
+    
+    for (const command of matchingCommands) {
+      try {
+        const description = command.description || `${command.command} ${command.args.join(' ')}`;
+        console.log(`▶️ Running: ${description}`);
+        
+        await this.runNpxCommand(command.command, command.args);
+        console.log(`✅ Post-install command completed: ${description}`);
+        
+      } catch (error) {
+        console.error(`❌ Post-install command failed for ${packageName}:`, error);
+        console.error(`   Command: ${command.command} ${command.args.join(' ')}`);
+      }
+    }
+  }
+
+  private async runNpxCommand(command: string, args: string[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const process = spawn('npx', [command, ...args], {
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      process.stdout?.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      process.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      process.on('close', (code) => {
+        if (code === 0) {
+          if (stdout.trim()) {
+            console.log(`   Output: ${stdout.trim()}`);
+          }
+          resolve();
+        } else {
+          reject(new Error(`Command failed with code ${code}: ${stderr}`));
+        }
+      });
+
+      process.on('error', (error) => {
+        reject(error);
+      });
+    });
   }
 
   private async installNpxPackage(packageName: string): Promise<void> {
