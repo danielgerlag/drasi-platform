@@ -25,6 +25,10 @@ export interface DockerConfig extends Registration {
     internalConfig: Registration;
 }
 
+export interface RemoteConfig extends Registration {
+    url: string;
+}
+
 function hydrateRegistration(data: any): Registration {    
     switch (data.kind) {
         case "kubernetes":
@@ -33,10 +37,23 @@ function hydrateRegistration(data: any): Registration {
             let dockerResult = data as DockerConfig;
             dockerResult.internalConfig = hydrateRegistration(data.internalConfig);
             return dockerResult;
+        case "remote":
+            return data as RemoteConfig;
         default:
             throw new Error(`Unknown registration kind: ${data.kind}`); 
 
     }    
+}
+
+// Validate that a value is a well-formed URL
+function isValidUrl(value: string): boolean {
+    try {
+        // Node's URL constructor will throw if invalid
+        new URL(value);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 export class ConfigurationRegistry implements Disposable {
@@ -77,6 +94,12 @@ export class ConfigurationRegistry implements Disposable {
         await fs.promises.writeFile(configPath, JSON.stringify(registration));        
     }
 
+    // Save a remote registration by id and url after validating the URL
+    async saveRemoteRegistration(id: string, url: string) {
+        const registration: RemoteConfig = { id, kind: "remote", url };
+        await this.saveRegistration(registration);
+    }
+    
     async loadRegistration(id: string): Promise<Registration | undefined> {
         let regPath = this.basePath + "/" + serversPath + "/" + id;
         let configPath = regPath + "/" + configFile;

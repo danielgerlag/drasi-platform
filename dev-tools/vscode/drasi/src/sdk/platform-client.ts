@@ -1,6 +1,6 @@
 import { KubeConfig ,PortForward, KubernetesObjectApi, CoreV1Api } from "@kubernetes/client-node";
 import net, { AddressInfo } from 'node:net';
-import { DockerConfig, KubernetesConfig, Registration } from "./config";
+import { DockerConfig, KubernetesConfig, Registration, RemoteConfig } from "./config";
 import yaml from 'js-yaml';
 
 
@@ -21,6 +21,8 @@ export function createPlatformClient(registration: Registration): PlatformClient
             return new KubernetesPlatformClient(registration as KubernetesConfig);
         case "docker":
             return createPlatformClient((registration as DockerConfig).internalConfig);
+        case "remote":
+            return new RemotePlatformClient(registration as RemoteConfig);
         default:
             throw new Error(`Unknown platform kind: ${registration.kind}`);
     }
@@ -139,6 +141,47 @@ class KubernetesManagementEndpoint implements ManagementEndpoint {
         return `127.0.0.1:${addr.port}`;
     }
    
+}
+
+class RemotePlatformClient implements PlatformClient {
+    private url: string;
+
+    constructor(registration: RemoteConfig) {
+        this.url = registration.url;
+    }
+
+    async getManagementEndpoint(): Promise<ManagementEndpoint> {
+        return new RemoteManagementEndpoint(this.url);
+    }
+
+    async createTunnel(_port: number, _resourceType: string, _resourceName: string): Promise<TunnelConnection> {
+        throw new Error("Tunneling is not supported for remote registrations");
+    }
+}
+
+class RemoteManagementEndpoint implements ManagementEndpoint {
+    private url: string;
+
+    constructor(url: string) {
+        this.url = url;
+    }
+
+    async close(): Promise<void> {
+        // No local resources to close for a remote endpoint
+        return;
+    }
+
+    async getManagementAddr(): Promise<string> {
+        try {
+            const parsed = new URL(this.url);
+            const host = parsed.hostname;
+            const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+            return `${host}:${port}`;
+        } catch {
+            // If URL parsing fails, fall back to returning the raw URL string
+            return this.url;
+        }
+    }
 }
 
 export class TunnelConnection {
