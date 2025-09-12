@@ -47,6 +47,12 @@ func NewPlatformClient(registration registry.Registration) (PlatformClient, erro
 			return nil, errors.New("invalid Docker config")
 		}
 		return NewPlatformClient(dockerConfig.InternalConfig)
+	case registry.Remote:
+		remoteConfig, ok := registration.(*registry.RemoteConfig)
+		if !ok {
+			return nil, errors.New("invalid Remote config")
+		}
+		return NewRemotePlatformClient(remoteConfig)
 	default:
 		return nil, fmt.Errorf("unsupported platform kind: %s", registration.GetKind())
 	}
@@ -339,4 +345,37 @@ func (t *KubernetesPlatformClient) getResourcePod(resourceType string, resourceN
 	}
 
 	return nil, errors.New(resourceName + " not available")
+}
+
+type RemotePlatformClient struct {
+	url string
+}
+
+func NewRemotePlatformClient(configuration *registry.RemoteConfig) (*RemotePlatformClient, error) {
+	return &RemotePlatformClient{
+		url: configuration.URL,
+	}, nil
+}
+
+func (r *RemotePlatformClient) CreateDrasiClient() (*ApiClient, error) {
+	return &ApiClient{
+		stopCh: make(chan struct{}, 1),
+		prefix: r.url,
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		streamClient: &http.Client{},
+	}, nil
+}
+
+func (r *RemotePlatformClient) CreateTunnel(resourceType string, resourceName string, localPort uint16) error {
+	return errors.New("tunneling is not supported for remote platform clients")
+}
+
+func (r *RemotePlatformClient) SetSecret(name string, key string, value []byte) error {
+	return errors.New("secret management is not supported for remote platform clients")
+}
+
+func (r *RemotePlatformClient) DeleteSecret(name string, key string) error {
+	return errors.New("secret management is not supported for remote platform clients")
 }

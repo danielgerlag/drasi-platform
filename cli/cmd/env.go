@@ -37,6 +37,7 @@ func NewEnvCommand() *cobra.Command {
 	cfgCommand.AddCommand(newCurrentEnvCommand())
 	cfgCommand.AddCommand(newDeleteEnvCommand())
 	cfgCommand.AddCommand(newAddKubernetesEnvCommand())
+	cfgCommand.AddCommand(newAddRemoteEnvCommand())
 
 	return cfgCommand
 }
@@ -224,4 +225,54 @@ func newAddKubernetesEnvCommand() *cobra.Command {
 	}
 
 	return kubeCommand
+}
+
+func newAddRemoteEnvCommand() *cobra.Command {
+	var remoteCommand = &cobra.Command{
+		Use:   "remote [name] [url]",
+		Short: "Add a remote Drasi environment and set it as the current environment.",
+		Long:  `Add a remote Drasi environment configuration by providing a name and the URL to the Drasi Management API.`,
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			url := args[1]
+
+			// Check if environment with this name already exists
+			exists, err := registry.RegistrationExists(name)
+			if err != nil {
+				return err
+			}
+			if exists {
+				return fmt.Errorf("environment %s already exists", name)
+			}
+
+			// Create the remote configuration
+			remoteConfig := &registry.RemoteConfig{
+				URL: url,
+				Config: registry.Config{
+					Id:   name,
+					Kind: registry.Remote,
+				},
+			}
+
+			// Save the configuration
+			err = registry.SaveRegistration(name, remoteConfig)
+			if err != nil {
+				return err
+			}
+
+			// Set it as current
+			err = registry.SetCurrentRegistration(name)
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("Environment %s added\n", name)
+			fmt.Printf("Environment %s set as current\n", name)
+
+			return nil
+		},
+	}
+
+	return remoteCommand
 }

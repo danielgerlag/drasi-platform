@@ -7,6 +7,7 @@ type Kind string
 const (
 	Docker     Kind = "docker"
 	Kubernetes Kind = "kubernetes"
+	Remote     Kind = "remote"
 )
 
 type Registration interface {
@@ -32,6 +33,11 @@ type DockerConfig struct {
 	Config
 }
 
+type RemoteConfig struct {
+	URL string `json:"url"`
+	Config
+}
+
 func (cfg *KubernetesConfig) GetKind() Kind {
 	return cfg.Kind
 }
@@ -40,11 +46,19 @@ func (cfg *DockerConfig) GetKind() Kind {
 	return cfg.Kind
 }
 
+func (cfg *RemoteConfig) GetKind() Kind {
+	return cfg.Kind
+}
+
 func (cfg *KubernetesConfig) GetId() string {
 	return cfg.Id
 }
 
 func (cfg *DockerConfig) GetId() string {
+	return cfg.Id
+}
+
+func (cfg *RemoteConfig) GetId() string {
 	return cfg.Id
 }
 
@@ -76,6 +90,11 @@ func (cfg *DockerConfig) MarshalJSON() ([]byte, error) {
 		Id:             cfg.Id,
 		Kind:           cfg.Kind,
 	})
+}
+
+func (cfg *RemoteConfig) MarshalJSON() ([]byte, error) {
+	type Alias RemoteConfig
+	return json.Marshal((*Alias)(cfg))
 }
 
 func UnmarshalJSON(data []byte) (Registration, error) {
@@ -119,6 +138,12 @@ func UnmarshalJSON(data []byte) (Registration, error) {
 		}
 
 		return dockerConfig, nil
+	case Remote:
+		var r RemoteConfig
+		if err := json.Unmarshal(data, &r); err != nil {
+			return nil, err
+		}
+		return &r, nil
 	default:
 		return nil, nil
 	}
